@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using PlayFab;
-using PlayFab.EditorModels;
 using PlayFabPowerTools.Services;
 
 namespace PlayFabPowerTools.Packages
@@ -18,9 +14,10 @@ namespace PlayFabPowerTools.Packages
         private enum States
         {
             Idle,
-            WiatForUsername,
+            WaitForUsername,
             WaitForPassword,
             Login,
+            LoginAAD,
             GetStudios
         }
 
@@ -31,6 +28,7 @@ namespace PlayFabPowerTools.Packages
             List<MainPackageStates> states = new List<MainPackageStates>()
             {
                 MainPackageStates.Login,
+                MainPackageStates.LoginAAD,
                 MainPackageStates.Logout
             };
             PackageManagerService.RegisterMainPackageStates(states, package);
@@ -38,6 +36,12 @@ namespace PlayFabPowerTools.Packages
 
         public bool SetState(string line)
         {
+            if(line.ToLower().Contains("loginaad"))
+            {
+                _state = States.LoginAAD;
+                return false;
+            }
+
             if (line.ToLower().Contains("auto"))
             {
                 var argsList = line.Split(' ');
@@ -58,8 +62,8 @@ namespace PlayFabPowerTools.Packages
 
             if (_state == States.Idle)
             {
-                _state = States.WiatForUsername;
-            }else if (_state == States.WiatForUsername)
+                _state = States.WaitForUsername;
+            }else if (_state == States.WaitForUsername)
             {
                 _username = line;
                 _state = States.WaitForPassword;
@@ -81,7 +85,7 @@ namespace PlayFabPowerTools.Packages
             var waitForLogin = false;
             switch (_state)
             {
-                case States.WiatForUsername:
+                case States.WaitForUsername:
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("");
                     Console.WriteLine("Username:");
@@ -94,7 +98,7 @@ namespace PlayFabPowerTools.Packages
                     break;
                 case States.Login:
                     waitForLogin = true;
-                    PlayFabService.Login(_username,_password, (success, devKey) =>
+                    PlayFabService.Login(_username, _password, (success, devKey) =>
                     {
                         if (!success)
                         {
@@ -110,7 +114,26 @@ namespace PlayFabPowerTools.Packages
                         Loop();
                         waitForLogin = false;
                     });
-                    break;       
+                    break;
+                 case States.LoginAAD:
+                    waitForLogin = true;
+                    PlayFabService.LoginAAD((success, devKey) =>
+                    {
+                        if (!success)
+                        {
+                            PackageManagerService.SetState(MainPackageStates.Idle);
+                            _state = States.Idle;
+                            waitForLogin = false;
+                            return;
+                        }
+
+                        _DeveloperClientToken = devKey;
+                        Console.ForegroundColor = ConsoleColor.White;
+                        _state = States.GetStudios;
+                        Loop();
+                        waitForLogin = false;
+                    });
+                    break;
                 case States.GetStudios:
                     waitForLogin = true;
                     PlayFabService.GetStudios(_DeveloperClientToken, (success) =>

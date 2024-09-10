@@ -26,6 +26,11 @@ namespace PlayFab.EditorModels
         public string DeveloperToolProductVersion { get; set; }
     }
 
+    public class LoginAADRequest
+    {
+        public string DeveloperToolProductName { get; set; }
+        public string DeveloperToolProductVersion { get; set; }
+    }
 
     public class LoginResult : PlayFabResultCommon
     {

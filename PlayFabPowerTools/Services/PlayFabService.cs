@@ -1,20 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Web;
+using Microsoft.Identity.Client;
 using Newtonsoft.Json;
 using PlayFab;
 using PlayFab.AdminModels;
 using PlayFab.EditorModels;
 using PlayFab.ServerModels;
 using PlayFabPowerTools.Packages;
+using PlayFabPowerTools.Utils;
 using GetTitleDataRequest = PlayFab.ServerModels.GetTitleDataRequest;
 using GetTitleDataResult = PlayFab.ServerModels.GetTitleDataResult;
 using SetTitleDataRequest = PlayFab.ServerModels.SetTitleDataRequest;
 using SetTitleDataResult = PlayFab.ServerModels.SetTitleDataResult;
+using StoreMarketingModel = PlayFab.AdminModels.StoreMarketingModel;
 
 namespace PlayFabPowerTools.Services
 {
@@ -75,7 +78,7 @@ namespace PlayFabPowerTools.Services
             {
                 if (result.Result.Error != null)
                 {
-                    Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                    Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                     callback(false, null);
                     return;
                 }
@@ -90,6 +93,74 @@ namespace PlayFabPowerTools.Services
             });
         }
 
+        public static async void LoginAAD(Action<bool, string> callback)
+        {
+            string[] scopes = new string[] { PlayFabHelper.ED_EX_AAD_SCOPES };
+
+            AuthenticationResult authResult = null;
+
+            var app = PublicClientApplicationBuilder.Create(PlayFabHelper.ED_EX_AAD_SIGNIN_CLIENTID)
+                           .WithAuthority($"{PlayFabHelper.AAD_SIGNIN_URL}{PlayFabHelper.ED_EX_AAD_SIGNNIN_TENANT}")
+                           .WithRedirectUri("http://localhost")
+                           .Build();
+
+            try
+            {
+                SystemWebViewOptions options = new SystemWebViewOptions();
+                authResult = await app.AcquireTokenInteractive(scopes).WithSystemWebViewOptions(options).ExecuteAsync();
+            }
+            catch (MsalException msalex)
+            {
+                Console.WriteLine($"Error acquiring Token:{System.Environment.NewLine}{msalex}");
+            }
+
+
+            if (authResult != null)
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                JwtSecurityToken jwtToken = tokenHandler.ReadJwtToken(authResult.AccessToken);
+
+                foreach (var audience in jwtToken.Audiences)
+                {
+                    if (audience.Contains(PlayFabHelper.ED_EX_AAD_SCOPE))
+                    {
+                        LoginAAD(authResult.AccessToken, callback);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Token acquired but for wrong audience: {audience}");
+                    }
+                }
+            }
+        }
+
+        public static void LoginAAD(string aadToken, Action<bool, string> callback)
+        {
+            var loginTask = PlayFabExtensions.LoginAAD(new LoginAADRequest()
+            {
+                DeveloperToolProductName = PlayFabHelper.EDEX_NAME,
+                DeveloperToolProductVersion = PlayFabHelper.EDEX_VERSION
+            },aadToken).ContinueWith((result) =>
+            {
+
+                if (result.Result.Error != null)
+                {
+                    Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
+                    callback(false, null);
+                    return;
+                }
+
+                if (result.IsCompleted)
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Login Successful");
+                    DeveloperClientToken = result.Result.Result.DeveloperClientToken;
+                    callback(true, DeveloperClientToken);
+                }
+
+            });
+        }
+
         public static void GetStudios(string token,Action<bool> callback)
         {
             var getStudioTask = PlayFabExtensions.GetStudios(new GetStudiosRequest()
@@ -100,7 +171,7 @@ namespace PlayFabPowerTools.Services
                 {
                     if (result.Result.Error != null)
                     {
-                        Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                        Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                         callback(false);
                         return;
                     }
@@ -129,7 +200,7 @@ namespace PlayFabPowerTools.Services
                     PlayFabSettings.DeveloperSecretKey = currentDevKey;
                     if (result.Result.Error != null)
                     {
-                        Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                        Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                         callback(false, null);
                         return;
                     }
@@ -160,7 +231,7 @@ namespace PlayFabPowerTools.Services
                     PlayFabSettings.DeveloperSecretKey = currentDevKey;
                     if (result.Result.Error != null)
                     {
-                        Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                        Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                         callback(false);
                         return;
                     }
@@ -187,7 +258,7 @@ namespace PlayFabPowerTools.Services
                     PlayFabSettings.DeveloperSecretKey = currentDevKey;
                     if (result.Result.Error != null)
                     {
-                        Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                        Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                         callback(false, null);
                         return;
                     }
@@ -218,7 +289,7 @@ namespace PlayFabPowerTools.Services
                     PlayFabSettings.DeveloperSecretKey = currentDevKey;
                     if (result.Result.Error != null)
                     {
-                        Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                        Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                         callback(false);
                         return;
                     }
@@ -246,7 +317,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false, null);
                             return;
                         }
@@ -277,7 +348,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            //Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false);
                             return;
                         }
@@ -305,7 +376,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false, null);
                             return;
                         }
@@ -337,7 +408,7 @@ namespace PlayFabPowerTools.Services
                         if (result.Result.Error != null)
                         {
                             
-                            //Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false);
                             return;
                         }
@@ -365,7 +436,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false, null);
                             return;
                         }
@@ -394,12 +465,18 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false,null, null);
                             return;
                         }
                         if (result.IsCompleted)
                         {
+                            if (result.Result.Result.Catalog.Count == 0)
+                            {
+                                callback(false, null, null);
+                                return;
+                            }
+
                             var version = result.Result.Result.Catalog[0].CatalogVersion;
                             callback(true, version, result.Result.Result.Catalog);
                         }
@@ -428,7 +505,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false);
                             return;
                         }
@@ -457,7 +534,7 @@ namespace PlayFabPowerTools.Services
                         Task<PlayFabResult<PlayFab.AdminModels.GetRandomResultTablesResult>> taskC = result as Task<PlayFabResult<PlayFab.AdminModels.GetRandomResultTablesResult>>;
                         if (taskC.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(taskC.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(taskC.Result.Error));
                             callback(false, null);
                             return;
                         }
@@ -490,7 +567,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false);
                             return;
                         }
@@ -521,8 +598,8 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine("Get Store Error: " + PlayFabUtil.GetErrorReport(result.Result.Error));
-                            callback(false, null, null, null, null);
+                            Console.WriteLine("Get Store Error: " + PlayFabUtil.GenerateErrorReport(result.Result.Error));
+                            callback(false, null, null, null, null);    
                             return;
                         }
                         if (result.IsCompleted)
@@ -559,7 +636,7 @@ namespace PlayFabPowerTools.Services
                         PlayFabSettings.DeveloperSecretKey = currentDevKey;
                         if (result.Result.Error != null)
                         {
-                            Console.WriteLine("Update Store Error: " + PlayFabUtil.GetErrorReport(result.Result.Error));
+                            Console.WriteLine("Update Store Error: " + PlayFabUtil.GenerateErrorReport(result.Result.Error));
                             callback(false);
                             return;
                         }
@@ -587,7 +664,7 @@ namespace PlayFabPowerTools.Services
             {
                 if (result.Result.Error != null)
                 {
-                    Console.WriteLine(PlayFabUtil.GetErrorReport(result.Result.Error));
+                    Console.WriteLine(PlayFabUtil.GenerateErrorReport(result.Result.Error));
                     callback(false, null, null);
                     return;
                 }

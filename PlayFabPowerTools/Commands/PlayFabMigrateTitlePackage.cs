@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using PlayFab.AdminModels;
@@ -25,7 +22,8 @@ namespace PlayFabPowerTools.Packages
             Catalogs,
             DropTables,
             Stores,
-            Complete
+            Complete,
+            Fail
         }
 
         private States _state = States.Idle;
@@ -60,6 +58,12 @@ namespace PlayFabPowerTools.Packages
 
         public bool SetState(string line)
         {
+            if(PlayFabService.Studios == null || PlayFabService.Studios.Count == 0)
+            {
+                _state = States.Fail;
+                return false;
+            }
+
             //Parse Command Line args
             _commandArgs = new commandArgs();
             // migrate T381 T390
@@ -634,6 +638,13 @@ namespace PlayFabPowerTools.Packages
                     break;
                 case States.Complete:
                     Console.WriteLine("Migration Complete.");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    PackageManagerService.SetState(MainPackageStates.Idle);
+                    _cts.Cancel();
+                    break;
+                case States.Fail:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Login before using the migrate command");
                     Console.ForegroundColor = ConsoleColor.White;
                     PackageManagerService.SetState(MainPackageStates.Idle);
                     _cts.Cancel();
