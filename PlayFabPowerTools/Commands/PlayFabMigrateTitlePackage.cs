@@ -615,6 +615,13 @@ namespace PlayFabPowerTools.Packages
 
                     if (!_droptableData.ToProcessed && _droptableData.FromProcessed)
                     {
+                        if (_droptableData.Data.Count == 0)
+                        {
+                            Console.WriteLine("Drop table data missing, skipping");
+                            _droptableData.ToProcessed = true;
+                            break;
+                        }
+
                         Console.WriteLine("Updating Drop Tables on Title: " + _commandArgs.ToTitleId);
                         PlayFabService.UpdateDropTableData(_commandArgs.ToTitleId, _droptableData.Data.Dequeue(),
                             (success) =>
